@@ -4,17 +4,13 @@
 
 ## Overview
 
-This project is a containerized Flask web application backed by a PostgreSQL database, with separate development and production configurations orchestrated by Docker Compose. In development, the app runs on Flask's built-in server with live code reloading. In production, requests are served by Gunicorn, a production-grade WSGI server, behind an Nginx reverse proxy that also serves static files and user-uploaded media directly from shared Docker volumes. The production image uses a multi-stage build to stay small, lints the code with flake8 during the build, and runs as a non-root user for security. Together, these services form a simplified version of the stack used by large-scale web applications like Instagram.
+This repository contains a Flask web application that runs entirely in Docker, using PostgreSQL for the database, Gunicorn as the application server, and Nginx as a reverse proxy. It has two configurations: a development setup that uses Flask's built-in server with live reloading, and a production setup where Nginx forwards requests to Gunicorn and serves static files and user uploads directly. Users can upload an image through a web form and then view it in the browser. A GitHub Actions workflow builds the development containers on every push to confirm the project builds successfully.
 
-![Demo: uploading and viewing an image](demo.gif)
+![Uploading and viewing an image](demo.gif)
 
 ## Build Instructions
 
-### Prerequisites
-
-- [Docker](https://docs.docker.com/get-docker/) with Docker Compose v2 (`docker compose`)
-
-Clone the repository:
+You need [Docker](https://docs.docker.com/get-docker/) with Docker Compose installed.
 
 ```bash
 git clone https://github.com/kseniia1803/flask-on-docker.git
@@ -23,62 +19,54 @@ cd flask-on-docker
 
 ### Development
 
-Build and start the web and database containers:
-
 ```bash
 docker compose up -d --build
 ```
 
-The app is available at http://localhost:1144. The database tables are created automatically on startup. To add a sample user to the database:
+The app runs at http://localhost:1144, and the database tables are created automatically. To add a sample user:
 
 ```bash
 docker compose exec web python manage.py seed_db
 ```
 
-To stop the services and remove the database volume:
-
-```bash
-docker compose down -v
-```
+Stop it with `docker compose down -v`.
 
 ### Production
 
-The production database credentials are kept out of version control. Create a `.env.prod.db` file in the project root:
+The database credentials file is excluded from version control, so create `.env.prod.db` in the project root first:
 
-```bash
-cat > .env.prod.db << 'END'
+```
 POSTGRES_USER=hello_flask
 POSTGRES_PASSWORD=hello_flask
 POSTGRES_DB=hello_flask_prod
-END
 ```
 
-If you choose a different password, update the `DATABASE_URL` line in `.env.prod` to match.
-
-Build and start the web, database, and Nginx containers, then create the database tables:
+The password must match the one in the `DATABASE_URL` line of `.env.prod`. Then build the services and create the database tables:
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build
 docker compose -f docker-compose.prod.yml exec web python manage.py create_db
 ```
 
-The app is available at http://localhost:1144, served through Nginx.
+The app runs at http://localhost:1144, served through Nginx. Stop it with `docker compose -f docker-compose.prod.yml down -v`.
 
-To stop the services and remove all volumes:
+### Using the app
 
-```bash
-docker compose -f docker-compose.prod.yml down -v
-```
-
-### Usage
-
-| URL | Description |
+| URL | What it does |
 | --- | --- |
-| `/` | Returns a JSON "hello world" response |
-| `/static/hello.txt` | A static file (served by Nginx in production) |
-| `/upload` | Form for uploading a file |
+| `/` | Returns `{"hello": "world"}` |
+| `/static/hello.txt` | Serves a static file |
+| `/upload` | Upload form: choose a file and click **Upload** |
 | `/media/<filename>` | Displays an uploaded file |
 
-To try it out, go to `/upload`, choose an image, click **Upload**, then visit `/media/<your-file-name>` to view it.
+If the app runs on a remote server, forward the port to your computer with `ssh -L 1144:localhost:1144 user@server` and open the URLs in your local browser. If port 1144 is taken, change the left-hand number under `ports:` in the compose files.
 
-If port 1144 is already in use on your machine, change the left-hand port number under `ports:` in the compose files (for example `8080:5000` or `8080:80`).
+## Changes from the Tutorial
+
+This project follows the [TestDriven.io tutorial](https://testdriven.io/blog/dockerizing-flask-with-postgres-gunicorn-and-nginx/), with a few fixes needed for current software versions:
+
+- Switched the base image from `python:3.11.3-slim-buster` to `python:3.11-slim-bookworm`, since Debian Buster's package repositories are no longer available.
+- Installed `netcat-openbsd` instead of `netcat`, which no longer exists as an installable package on Bookworm.
+- Changed the database URL to `postgresql+psycopg2://`, because newer SQLAlchemy versions default to a different Postgres driver that isn't installed.
+- Increased Nginx's upload limit to 20 MB so image uploads larger than 1 MB succeed.
+- Changed the port to 1144 to avoid conflicts on a shared server.
