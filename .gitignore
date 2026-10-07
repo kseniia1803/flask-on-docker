@@ -1,0 +1,9 @@
+.env.prod
+.env.prod.db
+__pycache__/
+*.py[cod]
+env/
+venv/
+services/web/project/media/*
+!services/web/project/media/.gitkeep
+.DS_Store
